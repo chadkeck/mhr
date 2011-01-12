@@ -18,4 +18,4 @@ You can query the MHR using the following formats:
 
 ### Requirements
 
-	* Python 2.6
+* Python 2.6
