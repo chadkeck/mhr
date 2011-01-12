@@ -48,14 +48,6 @@ def digestFiles( files ):
 
 	return digests
 
-def printUsage():
-	print "Usage: %s [options] [files]" % sys.argv[0]
-	print """	-m			show only malicious results
-	-d MD5|SHA-1		digest to send
-	-f file			file of digests to send
-	-o json|csv		output format (default: csv)
-	"""
-
 def connectToMHR( timeout_secs ):
 	host = 'hash.cymru.com'
 	port = 43
