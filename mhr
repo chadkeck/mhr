@@ -5,6 +5,7 @@ import sys
 import hashlib
 import json
 import fileinput
+import os.path
 from optparse import OptionParser
 
 def parseLine( line ):
@@ -41,10 +42,13 @@ def digestFile( fn ):
 def digestFiles( files ):
 	digests = {}
 	for fn in files:
-		digest = digestFile( fn )
-		digests[digest] = {}
-		digests[digest]['file'] = fn
-		digests[digest]['type'] = 'md5'
+		if os.path.isfile( fn ):
+			digest = digestFile( fn )
+			digests[digest] = {}
+			digests[digest]['file'] = fn
+			digests[digest]['type'] = 'md5'
+		else:
+			print "warning: '%s' is not a file" % (fn)
 
 	return digests
 
