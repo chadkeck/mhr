@@ -13,8 +13,8 @@ Using the utility
 You can query the MHR using the following formats:
 
 * Files (The utility will automatically generate the hash of the file.)
-	* A text file containing a list of hashes. (One hash per line.)
-	* Hash passed on command line.
+* A text file containing a list of hashes. (One hash per line.)
+* Hash passed on command line.
 
 ### Requirements
 
