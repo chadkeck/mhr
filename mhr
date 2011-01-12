@@ -156,7 +156,7 @@ def main():
 	option_parser.add_option( "-f", "--file", help="process file that contains hashes separated by a newline", metavar="FILE", dest="filename" )
 	option_parser.add_option( "-d", "--digest", help="MD5 or SHA-1 to query", metavar="DIGEST", dest="digest" )
 	option_parser.add_option( "-m", "--malicious-only", help="show only malicious results in output", action="store_true", dest="malicious_only", default=False )
-	option_parser.add_option( "-o", "--output-format", help="output format: json, csv [default: %default]", metavar="FORMAT", default="json" )
+	option_parser.add_option( "-o", "--output-format", help="output format: json, csv [default: %default]", metavar="FORMAT", dest="output_format", default="csv" )
 
 	(options, args) = option_parser.parse_args()
 
@@ -164,17 +164,12 @@ def main():
 		option_parser.print_help()
 		sys.exit( 1 )
 
-	'''
-	print options
-	print args
-	return
-	'''
-
 	recognized_output_types = ['csv', 'json']
-	output_type = "csv"
+	output_type = options.output_format
 	if not output_type in recognized_output_types:
 		print "error: unrecognized output format '%s'" % output_type
-		print "error: output format must be one of the following: " % ', '.join( recognized_output_types )
+		print "error: output format must be one of the following: %s" % (', '.join( recognized_output_types ))
+		print
 		option_parser.print_help()
 		sys.exit( 1 )
 
