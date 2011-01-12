@@ -1,0 +1,220 @@
+#!/opt/local/bin/python2.6
+
+import socket
+import sys
+import hashlib
+import json
+import fileinput
+from optparse import OptionParser
+
+def parseLine( line ):
+	if not line or line.startswith( '#' ):
+		return None
+
+	pieces = line.split( ' ' )
+	return pieces
+
+def parseResult( data, digests ):
+	line_results = map( parseLine, data.split( "\n" ) )
+	results = filter( lambda x: x and len( x ) == 3, line_results )
+
+	for result in results:
+		digest = result[0]
+		timestamp = result[1]
+		detection_rate = result[2]
+		digests[digest]['timestamp'] = timestamp
+		digests[digest]['detection_rate'] = detection_rate
+
+	return digests
+
+def digestFile( fn ):
+	f = open( fn, 'rb' )
+	h = hashlib.md5()
+	while True:
+		chunk = f.read( 1024 )
+		if not chunk:
+			break
+		h.update( chunk )
+
+	return h.hexdigest()
+
+def digestFiles( files ):
+	digests = {}
+	for fn in files:
+		digest = digestFile( fn )
+		digests[digest] = {}
+		digests[digest]['file'] = fn
+		digests[digest]['type'] = 'md5'
+
+	return digests
+
+def printUsage():
+	print "Usage: %s [options] [files]" % sys.argv[0]
+	print """	-m			show only malicious results
+	-d MD5|SHA-1		digest to send
+	-f file			file of digests to send
+	-o json|csv		output format (default: csv)
+	"""
+
+def connectToMHR( timeout_secs ):
+	host = 'hash.cymru.com'
+	port = 43
+
+	try:
+		sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+	except socket.error, msg:
+		sys.stderr.write( "error:%s\n" % msg[1] )
+		sys.exit( 1 )
+
+	sock.settimeout( timeout_secs )
+
+	try:
+		sock.connect( (host, port) )
+	except socket.error, msg:
+		sys.stderr.write( "error: %s\n" % msg[1] )
+		sys.exit( 2 )
+
+	return sock
+
+def sendDigests( sock, digests ):
+	sock.send( "begin\r\n" )
+	map( lambda digest: sock.send( "%s\r\n" % digest ), digests )
+	sock.send( "end\r\n" )
+
+	data = sock.recv( 1024 )
+
+	received = ""
+	while len( data ):
+		received += data
+		data = sock.recv( 1024 )
+
+	sock.close()
+
+	return received
+
+def isValidDigest( digest ):
+	digest_len = len( digest )
+	if digest_len != 32 and digest_len != 40:
+		return False
+	
+	return True
+
+def handleDigestArgument( digest ):
+	digest_len = len( digest )
+
+	if not isValidDigest( digest ):
+		print "error: '%s' is not a valid MD5 or SHA-1" % digest
+		sys.exit( 1 )
+
+	digests = {}
+	digests[digest] = {}
+	digests[digest]['file'] = ''
+
+	if digest_len == 32:
+		digests[digest]['type'] = 'md5'
+	elif digest_len == 40:
+		digests[digest]['type'] = 'sha1'
+
+	return digests
+
+def handleFileArgument( filename ):
+	digests = {}
+
+	f = open( filename, 'r' )
+
+	file_text = f.read()
+	lines = file_text.splitlines()
+
+	for d in lines:
+		if isValidDigest( d ):
+			digests[d] = {}
+			digests[d]['file'] = ''
+
+			digest_type = 'md5' if len( d ) == 32 else 'sha1'
+			digests[d]['type'] = digest_type
+		else:
+			pass # TODO give a warning to the user that a digest in the file was invalid
+
+	return digests
+
+def printSeparatedData( digests, separator=',' ):
+	fields = ['digest', 'timestamp', 'detection_rate', 'file']
+	print "#%s" % separator.join( fields )
+	for d in digests:
+		print separator.join( (d, digests[d]['timestamp'], digests[d]['detection_rate'], digests[d]['file']) )
+
+def maliciousDigests( digests ):
+	return filter( lambda digest: digests[digest]['detection_rate'] != 'NO_DATA', digests.keys() )
+
+def benignDigests( digests ):
+	return filter( lambda digest: digests[digest]['detection_rate'] == 'NO_DATA', digests.keys() )
+
+
+def main():
+
+	description = "Queries Team Cymru's Malware Hash Registry (MHR) either from " \
+					"a file containing a list of MD5 and/or SHA-1 digests," \
+					"an MD5 or SHA-1 hash, or by generating the MD5 digest of a file. " \
+					"See www.team-cymru.org/Services/MHR/ for more information."
+			
+	option_parser = OptionParser( usage="usage: %prog [options] [files]", version="%prog 1.0", description=description )
+	option_parser.add_option( "-f", "--file", help="process file that contains hashes separated by a newline", metavar="FILE", dest="filename" )
+	option_parser.add_option( "-d", "--digest", help="MD5 or SHA-1 to query", metavar="DIGEST", dest="digest" )
+	option_parser.add_option( "-m", "--malicious-only", help="show only malicious results in output", action="store_true", dest="malicious_only", default=False )
+	option_parser.add_option( "-o", "--output-format", help="output format: json, csv [default: %default]", metavar="FORMAT", default="json" )
+
+	(options, args) = option_parser.parse_args()
+
+	if (len( args ) == 0) and not options.filename and not options.digest:
+		option_parser.print_help()
+		sys.exit( 1 )
+
+	'''
+	print options
+	print args
+	return
+	'''
+
+	recognized_output_types = ['csv', 'json']
+	output_type = "csv"
+	if not output_type in recognized_output_types:
+		print "error: unrecognized output format '%s'" % output_type
+		print "error: output format must be one of the following: " % ', '.join( recognized_output_types )
+		option_parser.print_help()
+		sys.exit( 1 )
+
+	digests_to_send = {}
+
+	if options.digest:
+		digests_to_send.update( handleDigestArgument( options.digest ) )
+	
+	if options.filename:
+		digests_to_send.update( handleFileArgument( options.filename ) )
+
+	files_to_digest = args
+	if len( files_to_digest ) > 0:
+		digests_to_send.update( digestFiles( files_to_digest ) )
+
+	if not digests_to_send:
+		print "error: no digests found"
+		sys.exit( 2 )
+
+	timeout_secs = 5.0
+	sock = connectToMHR( timeout_secs )
+	received_data = sendDigests( sock, digests_to_send )
+	digests = parseResult( received_data, digests_to_send )
+
+	if options.malicious_only:
+		benign_digests = benignDigests( digests )
+		for b in benign_digests:
+			del digests[b]
+
+	if output_type == 'json':
+		print json.dumps( digests, indent=4 )
+	else:
+		printSeparatedData( digests, separator="," )
+
+
+if __name__ == "__main__":
+	main()
+	sys.exit( 0 )
