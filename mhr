@@ -91,6 +91,15 @@ def isValidDigest( digest ):
 	
 	return True
 
+def getDigestType( digest ):
+	digest_length = len( digest )
+	if digest_length == 32:
+		return 'md5'
+	elif digest_length == 40:
+		return 'sha1'
+	else:
+		return '?'
+
 def handleDigestArgument( digest ):
 	digest_len = len( digest )
 
@@ -101,31 +110,25 @@ def handleDigestArgument( digest ):
 	digests = {}
 	digests[digest] = {}
 	digests[digest]['file'] = ''
-
-	if digest_len == 32:
-		digests[digest]['type'] = 'md5'
-	elif digest_len == 40:
-		digests[digest]['type'] = 'sha1'
+	digests[digest]['type'] = getDigestType( digest )
 
 	return digests
 
 def handleFileArgument( filename ):
 	digests = {}
 
-	f = open( filename, 'r' )
+	fi = fileinput.input( [filename] )
 
-	file_text = f.read()
-	lines = file_text.splitlines()
+	for line in fi:
+		d = line.rstrip() # strip off the newline
 
-	for d in lines:
 		if isValidDigest( d ):
 			digests[d] = {}
 			digests[d]['file'] = ''
 
-			digest_type = 'md5' if len( d ) == 32 else 'sha1'
-			digests[d]['type'] = digest_type
+			digests[d]['type'] = getDigestType( d )
 		else:
-			pass # TODO give a warning to the user that a digest in the file was invalid
+			print "warning: %s:%d: '%s' is not a valid digest" % (fi.filename(), fi.lineno(), d)
 
 	return digests
 
